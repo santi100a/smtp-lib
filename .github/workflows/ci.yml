@@ -1,0 +1,102 @@
+name: Continuous Integration (CI)
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  test:
+    outputs:
+      rel: ${{ steps.commit.outputs.rel }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4 # Update to v4
+      - uses: actions/setup-node@v4 # Update to v4
+        with:
+          node-version: 22.x # Match your publish job
+
+      - name: Check commit message
+        id: commit
+        run: |
+          COMMIT_MSG=$(git log --format=%B -n 1 HEAD)
+          STRING=$(echo "$COMMIT_MSG" | (grep -E "infra:|docs:|lint:|code-style:|not-publish:" || echo ''))
+
+          if [ -z "$STRING" ]; then
+           echo "rel=1" >> $GITHUB_OUTPUT
+           echo "IS_RELEASE_COMMIT=1" >> $GITHUB_ENV
+          else 
+           echo "This commit will NOT trigger a release."
+           echo "rel=0" >> $GITHUB_OUTPUT
+           echo "IS_RELEASE_COMMIT=0" >> $GITHUB_ENV
+          fi
+
+      - name: Install dependencies
+        run: yarn
+
+      - name: Build source code
+        run: yarn build
+
+  release:
+    needs: test
+    if: needs.test.outputs.rel == '1'
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Generate tag, release name, and body
+        run: |
+          TAG_NAME="v$(jq -r '.version' package.json)"
+          RELEASE_NAME="Release $TAG_NAME"
+          BODY=$(sed -n "/## Version $(jq -r '.version' package.json | sed 's/\./\\\./g')/,/##/p" CHANGELOG.md | sed '1d;/^##/d')
+          echo "TAG_NAME=$TAG_NAME" >> $GITHUB_ENV
+          echo "RELEASE_NAME=$RELEASE_NAME" >> $GITHUB_ENV
+          echo "$BODY" >> release.md
+
+      - name: Create release
+        uses: ncipollo/release-action@v1.14.0 # Update to latest
+        with:
+          allowUpdates: true
+          tag: ${{ env.TAG_NAME }}
+          name: ${{ env.RELEASE_NAME }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          bodyFile: release.md
+          draft: false
+          prerelease: false
+  publish:
+    needs: release
+    permissions:
+      contents: read
+      id-token: write # Required for npm publish --provenance (OIDC)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          registry-url: https://registry.npmjs.org/
+          always-auth: false
+
+      - name: Install dependencies
+        run: yarn --frozen-lockfile
+
+      - name: Compile TypeScript
+        run: yarn build
+
+      - name: Publish to NPM
+        run: |
+          unset NODE_AUTH_TOKEN
+          unset NPM_AUTH_TOKEN
+          unset NPM_TOKEN
+
+          npm publish --provenance --access public
