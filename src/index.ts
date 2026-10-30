@@ -1,3 +1,3 @@
 import SmtpServer from './SmtpServer.class';
-
-export = SmtpServer;
+export type * from './types';
+export default SmtpServer;

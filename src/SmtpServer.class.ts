@@ -6,13 +6,28 @@ import { ServerConfig, CommandHandler, SmtpCommand } from './types';
 import SmtpResponse from './SmtpResponse.class';
 import defaultConfig from './defaultConfig';
 
-const emailRegex =
+export const emailRegex =
 	/^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
 
+/**
+ * The base class for an SMTP {@link Server}.
+ */
 export default class SmtpServer extends Server {
+	/**
+	 * The internal configuration object for the server.
+	 */
 	private readonly config: ServerConfig;
+
+	/**
+	 * A {@link Set} of {@link Socket} objects, corresponding to all
+	 * currently open connections to the server.
+	 */
 	readonly connectedSockets: Set<Socket> = new Set();
-	private __plainAuthHandler = (
+
+	/**
+	 * The internal handler for AUTH LOGIN and AUTH PLAIN (basic auth).
+	 */
+	private __basicAuthHandler = (
 		usernameBuffer: Buffer,
 		passwordBuffer: Buffer,
 		command: SmtpCommand,
@@ -26,6 +41,11 @@ export default class SmtpServer extends Server {
 		);
 		return false;
 	};
+
+	/**
+	 * The internal command handlers object. It maps command names to
+	 * functions that MUST conform to the {@link CommandHandler} type.
+	 */
 	private readonly __commandHandlers: Record<string, CommandHandler> = {
 		QUIT: (command, response) => {
 			if (command.params.length > 0)
@@ -213,21 +233,29 @@ export default class SmtpServer extends Server {
 				);
 			if (address.length === 0)
 				response.mailTransaction = { from: '', to: new Set(), data: null };
-			else {
-				if (!emailRegex.test(address))
-					return response.status(
-						555,
-						[5, 5, 2],
-						this.config.generateInvalidFromString?.(command, response) ??
-							'Invalid FROM address.'
-					);
-				response.mailTransaction = { from: address, to: new Set(), data: null };
-			}
+			else if (!emailRegex.test(address))
+				return response.status(
+					555,
+					[5, 5, 2],
+					this.config.generateInvalidFromString?.(command, response) ??
+						'Invalid FROM address.'
+				);
+
+			const { text, statusCode, enhancedCode, allow } =
+				this.config.handleMailFrom(address, response);
+			if (allow)
+				return response.status(
+					statusCode ?? 250,
+					enhancedCode ?? [2, 1, 0],
+					text ??
+						this.config.generateMailAcceptedString?.(command, response) ??
+						'Sender accepted.'
+				);
+
 			return response.status(
-				250,
-				[2, 1, 0],
-				this.config.generateMailAcceptedString?.(command, response) ??
-					'Sender accepted.'
+				statusCode ?? 550,
+				enhancedCode ?? [5, 0, 0],
+				text ?? 'Sender not accepted.'
 			);
 		},
 		RCPT: (command, response) => {
@@ -268,22 +296,32 @@ export default class SmtpServer extends Server {
 					this.config.emptyRecipientAddressString?.(command, response) ??
 						'Empty recipient address.'
 				);
-			} else {
-				if (!emailRegex.test(address))
-					return response.status(
-						555,
-						[5, 5, 2],
-						this.config.invalidRecipientAddressString?.(command, response) ??
-							'Invalid recipient address.'
-					);
+			}
+			if (!emailRegex.test(address))
+				return response.status(
+					555,
+					[5, 5, 2],
+					this.config.invalidRecipientAddressString?.(command, response) ??
+						'Invalid recipient address.'
+				);
+
+			const { text, statusCode, enhancedCode, allow } =
+				this.config.handleMailFrom(address, response);
+			if (allow) {
 				// Push the valid recipient into the transaction array
 				response.mailTransaction.to.add(address);
+				return response.status(
+					statusCode ?? 250,
+					enhancedCode ?? [2, 1, 5],
+					text ??
+						this.config.generateRcptAcceptedString?.(command, response) ??
+						'Sender accepted.'
+				);
 			}
 			return response.status(
-				250,
-				[2, 1, 5],
-				this.config.generateRcptAcceptedString?.(command, response) ??
-					'Recipient accepted.'
+				statusCode ?? 550,
+				enhancedCode ?? [5, 0, 0],
+				text ?? 'Sender not accepted.'
 			);
 		},
 		DATA: async (command, response) => {
@@ -409,7 +447,7 @@ export default class SmtpServer extends Server {
 							'Malformed auth string.'
 					);
 				const [, username, password] = parts;
-				const authenticated = this.__plainAuthHandler(
+				const authenticated = this.__basicAuthHandler(
 					Buffer.from(username),
 					Buffer.from(password),
 					command,
@@ -451,7 +489,7 @@ export default class SmtpServer extends Server {
 				response.status(334, Buffer.from(passPrompt).toString('base64'));
 				const passwordLine = await response.readline();
 				if (passwordLine === null) return;
-				const authenticated = this.__plainAuthHandler(
+				const authenticated = this.__basicAuthHandler(
 					b64decode(usernameLine),
 					b64decode(passwordLine),
 					command,
@@ -483,13 +521,20 @@ export default class SmtpServer extends Server {
 				);
 		}
 	};
-	constructor(userConfig: Partial<ServerConfig> = {}) {
+
+	/**
+	 * The constructor for the SMTP server instance.
+	 * @param config - The server configuration object. Must conform
+	 * to {@link ServerConfig}, except that configurations may be omitted,
+	 * in which case the defaults will be used.
+	 */
+	constructor(config: Partial<ServerConfig> = {}) {
 		const mergedConfig: ServerConfig = {
 			...defaultConfig,
-			...userConfig,
+			...config,
 			secureContextOptions: {
 				...defaultConfig.secureContextOptions,
-				...userConfig.secureContextOptions
+				...config.secureContextOptions
 			}
 		};
 		super(async (socket) => {
@@ -570,10 +615,50 @@ export default class SmtpServer extends Server {
 		});
 		this.config = mergedConfig;
 	}
+
+	/**
+	 * Sets the handler for a command.
+	 *
+	 * **NOTE: Only one handler can be set per command - calling
+	 * this method more than once will override the previous handler(s).**
+	 *
+	 * @param commandName - The command name to be handled. Should be in uppercase.
+	 * @param handler - The {@link CommandHandler} function to handle this command.
+	 *
+	 */
 	setHandler(commandName: string, handler: CommandHandler) {
 		this.__commandHandlers[commandName] = handler;
 		return this;
 	}
+
+	/**
+	 * Sets the handler for basic authentication (PLAIN/LOGIN).
+	 *
+	 * **NOTE: Only one handler can be set - calling
+	 * this method more than once will override the previous handler(s).**
+	 *
+	 * @param handler - The function to handle basic auth. It is given four
+	 * parameters - the pre-parsed username and password (as `Buffer` objects),
+	 * the original {@link SmtpCommand} object, and the corresponding
+	 * {@link Response} object.
+	 *
+	 */
+	setBasicAuthHandler(
+		handler: (
+			usernameBuffer: Buffer,
+			passwordBuffer: Buffer,
+			command: SmtpCommand,
+			response: SmtpResponse
+		) => boolean
+	) {
+		this.__basicAuthHandler = handler;
+		return this;
+	}
+	/**
+	 * @deprecated
+	 * @see {@link SmtpServer.setBasicAuthHandler}
+	 *
+	 */
 	setPlainAuthHandler(
 		handler: (
 			usernameBuffer: Buffer,
@@ -582,13 +667,22 @@ export default class SmtpServer extends Server {
 			response: SmtpResponse
 		) => boolean
 	) {
-		this.__plainAuthHandler = handler;
-		return this;
+		return this.setBasicAuthHandler(handler);
 	}
+
+	/**
+	 * Sends a 421 response to all connected clients, destroys all current connections,
+	 * then closes the server to stop accepting more.
+	 *
+	 * **NOTE: This function is asynchronous - it returns a `Promise`, not `this`.**
+	 */
 	async shutdown() {
 		this.connectedSockets.forEach((socket) => {
 			socket.write(
-				`\r\n421 ${this.config.shutdownCloseString?.(socket)}\r\n`,
+				`\r\n421 4.3.0 ${
+					this.config.shutdownCloseString?.(socket) ??
+					'Server shutting down at operator request.'
+				}\r\n`,
 				() => socket.destroy()
 			);
 		});

@@ -3,14 +3,17 @@ import type { SecureContextOptions } from 'node:tls';
 import type SmtpResponse from './SmtpResponse.class';
 import type Queue from './libqueue';
 
-export interface ClientFilterOutput {
-	readonly allow: boolean;
+export interface ResponseData {
 	readonly statusCode?: number;
 	readonly enhancedCode?: [number, number, number];
 	readonly text?: string;
 }
 
-export interface MessageFilterOutput extends ClientFilterOutput {
+export interface FilterOutput extends ResponseData {
+	readonly allow: boolean;
+}
+
+export interface MessageFilterOutput extends FilterOutput {
 	readonly revisedMessage?: Buffer;
 }
 
@@ -25,6 +28,8 @@ export interface ServerConfig {
 		command: SmtpCommand,
 		response: SmtpResponse
 	): unknown;
+	handleMailFrom(address: string, response: SmtpResponse): FilterOutput;
+	handleRcptTo(address: string, response: SmtpResponse): FilterOutput;
 	generateHelpPreamble(command: SmtpCommand, response: SmtpResponse): string;
 	generateQuitString(command: SmtpCommand, response: SmtpResponse): string;
 	unknownCommandHandler: CommandHandler;
@@ -131,7 +136,7 @@ export interface ServerConfig {
 		msgBuffer: Buffer
 	): string;
 	noRecipientsString(command: SmtpCommand, response: SmtpResponse): string;
-	filterClient(socket: Socket): ClientFilterOutput;
+	filterClient(socket: Socket): FilterOutput;
 	filterMessage(message: Buffer): MessageFilterOutput;
 
 	secureContextOptions?: SecureContextOptions;

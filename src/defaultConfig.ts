@@ -1,6 +1,9 @@
 import { ServerConfig } from './types';
 import Queue from './libqueue';
 
+/**
+ * The server configuration defaults.
+ */
 const config: ServerConfig = {
 	generateBannerText() {
 		return 'ESMTP';
@@ -109,6 +112,22 @@ const config: ServerConfig = {
 	},
 	generateRcptAcceptedString() {
 		return 'Recipient accepted.';
+	},
+	handleMailFrom() {
+		return {
+			allow: true,
+			statusCode: 250,
+			enhancedCode: [2, 1, 0],
+			text: 'Sender accepted.'
+		};
+	},
+	handleRcptTo() {
+		return {
+			allow: true,
+			statusCode: 250,
+			enhancedCode: [2, 1, 5],
+			text: 'Receiver accepted.'
+		};
 	},
 	generateDataPromptString() {
 		return 'Go ahead! End with <CRLF>.<CRLF>';
