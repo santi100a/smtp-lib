@@ -208,7 +208,7 @@ export default class SmtpServer extends Server {
 				this.config.generateUnimplementedString?.(command, response) ??
 					'Unimplemented.'
 			),
-		MAIL: (command, response) => {
+		MAIL: async (command, response) => {
 			const [, address] = command.params;
 			if (command.params[0] !== 'FROM')
 				return response.status(
@@ -242,7 +242,7 @@ export default class SmtpServer extends Server {
 				);
 
 			const { text, statusCode, enhancedCode, allow } =
-				this.config.handleMailFrom(address, response);
+				await this.config.handleMailFrom(address, response);
 			if (allow)
 				return response.status(
 					statusCode ?? 250,
@@ -258,7 +258,7 @@ export default class SmtpServer extends Server {
 				text ?? 'Sender not accepted.'
 			);
 		},
-		RCPT: (command, response) => {
+		RCPT: async (command, response) => {
 			const [, address] = command.params;
 			if (command.params[0] !== 'TO')
 				return response.status(
@@ -306,7 +306,7 @@ export default class SmtpServer extends Server {
 				);
 
 			const { text, statusCode, enhancedCode, allow } =
-				this.config.handleMailFrom(address, response);
+				await this.config.handleMailFrom(address, response);
 			if (allow) {
 				// Push the valid recipient into the transaction array
 				response.mailTransaction.to.add(address);
@@ -401,7 +401,7 @@ export default class SmtpServer extends Server {
 
 			// Combine lines into a final Buffer
 			const buffer = Buffer.from(lines.join('\r\n'), 'utf-8');
-			const filterOutput = this.config.filterMessage(buffer);
+			const filterOutput = await this.config.filterMessage(buffer);
 			if (filterOutput.allow) {
 				response.mailTransaction.data = filterOutput.revisedMessage ?? buffer;
 				this.config.mailQueue.add(response.mailTransaction);
@@ -550,7 +550,7 @@ export default class SmtpServer extends Server {
 				if (bannerText) bannerString += ' '.concat(bannerText);
 				else bannerString += 'ESMTP';
 				const response = new SmtpResponse(socket, readline);
-				const filterOutput = this.config.filterClient(socket);
+				const filterOutput = await this.config.filterClient(socket);
 				if (filterOutput.allow) response.status(220, bannerString);
 				else {
 					response

@@ -3,6 +3,8 @@ import type { SecureContextOptions } from 'node:tls';
 import type SmtpResponse from './SmtpResponse.class';
 import type Queue from './libqueue';
 
+export type LoosePromise<T = unknown> = T | Promise<T>;
+
 export interface ResponseData {
 	readonly statusCode?: number;
 	readonly enhancedCode?: [number, number, number];
@@ -28,8 +30,8 @@ export interface ServerConfig {
 		command: SmtpCommand,
 		response: SmtpResponse
 	): unknown;
-	handleMailFrom(address: string, response: SmtpResponse): FilterOutput;
-	handleRcptTo(address: string, response: SmtpResponse): FilterOutput;
+	handleMailFrom(address: string, response: SmtpResponse): LoosePromise<FilterOutput>;
+	handleRcptTo(address: string, response: SmtpResponse): LoosePromise<FilterOutput>;
 	generateHelpPreamble(command: SmtpCommand, response: SmtpResponse): string;
 	generateQuitString(command: SmtpCommand, response: SmtpResponse): string;
 	unknownCommandHandler: CommandHandler;
@@ -136,8 +138,8 @@ export interface ServerConfig {
 		msgBuffer: Buffer
 	): string;
 	noRecipientsString(command: SmtpCommand, response: SmtpResponse): string;
-	filterClient(socket: Socket): FilterOutput;
-	filterMessage(message: Buffer): MessageFilterOutput;
+	filterClient(socket: Socket): LoosePromise<FilterOutput>;
+	filterMessage(message: Buffer): LoosePromise<MessageFilterOutput>;
 
 	secureContextOptions?: SecureContextOptions;
 	hostname: string;
