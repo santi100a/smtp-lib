@@ -25,3 +25,6 @@
 ## Version 1.0.4
 
 - Fixed bug with default handler `MAIL FROM` where the mail transaction object was not initialized if the address was not empty and was accepted by `filterMailFrom`. This caused the `RCPT TO` command to fail with a `503 5.5.1` error because the mail transaction object was not set up correctly. The fix ensures that the mail transaction object is initialized properly when the sender address is accepted.
+
+## Version 1.0.5
+- Modified the default `DATA` handler to expect a return value from `Queue.add()` to determine whether the message was successfully added to the queue. If `Queue.add()` returns an object with `success: false`, the server will respond with a `451 4.3.0` error, indicating that the message could not be added to the queue. This change ensures that the server correctly handles storage or queuing errors, providing appropriate feedback to the client.

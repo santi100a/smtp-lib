@@ -19,6 +19,7 @@ const config: ServerConfig = {
 		_: [],
 		add(item) {
 			this._.push(item);
+			return { success: true };
 		},
 		remove() {
 			return this._.shift();

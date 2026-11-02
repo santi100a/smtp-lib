@@ -22,6 +22,10 @@ export interface ResponseData {
 	readonly text?: string;
 }
 
+export interface QueueAddResult extends ResponseData {
+	readonly success: boolean;
+}
+
 /** The base interface for the output of filter functions. */
 export interface FilterOutput extends ResponseData {
 	/** Whether the filter permits the message, connection, etc. */
@@ -454,12 +458,12 @@ export interface ServerConfig {
 	 * @param command - The {@link SmtpCommand} object that contains the parsed
 	 * command and its parameters.
 	 * @param response - The {@link SmtpResponse} object used for this session.
-	*/
+	 */
 	emptyRecipientAddressString(
 		command: SmtpCommand,
 		response: SmtpResponse
 	): string;
-	
+
 	/**
 	 * Returns the text that immediately follows the `553 5.1.3` code in the
 	 * response to the `RCPT TO` command when the recipient address is invalid.
@@ -485,7 +489,7 @@ export interface ServerConfig {
 		command: SmtpCommand,
 		response: SmtpResponse
 	): string;
-	
+
 	/**
 	 * Returns the text that immediately follows the `555 5.5.2` code in the
 	 * response to the `MAIL` command if the second keyword is not `FROM`.
@@ -503,18 +507,18 @@ export interface ServerConfig {
 	 * @param command - The {@link SmtpCommand} object that contains the parsed
 	 * command and its parameters.
 	 * @param response - The {@link SmtpResponse} object used for this session.
-	*/
+	 */
 	onlyRcptToString(command: SmtpCommand, response: SmtpResponse): string;
-	
+
 	/**
 	 * Returns the text that immediately follows the `503 5.5.1` code in the
 	 * response to the `RCPT` or `DATA` commands if there is no mail transaction
 	 * in progress.
-	*
-	* @param command - The {@link SmtpCommand} object that contains the parsed
-	* command and its parameters.
-	* @param response - The {@link SmtpResponse} object used for this session.
-	*/
+	 *
+	 * @param command - The {@link SmtpCommand} object that contains the parsed
+	 * command and its parameters.
+	 * @param response - The {@link SmtpResponse} object used for this session.
+	 */
 	generateNoTransactionString(
 		command: SmtpCommand,
 		response: SmtpResponse
@@ -524,16 +528,16 @@ export interface ServerConfig {
 	 * Returns the text that immediately follows the `502 5.5.1` code in the
 	 * response to a command if a default stub for unimplemented commands is
 	 * still set as command handler (e.g. `AUTH` or `EXPN`).
-	*
-	* @param command - The {@link SmtpCommand} object that contains the parsed
-	* command and its parameters.
-	* @param response - The {@link SmtpResponse} object used for this session.
+	 *
+	 * @param command - The {@link SmtpCommand} object that contains the parsed
+	 * command and its parameters.
+	 * @param response - The {@link SmtpResponse} object used for this session.
 	 */
 	generateUnimplementedString(
 		command: SmtpCommand,
 		response: SmtpResponse
 	): string;
-	
+
 	/**
 	 * Returns the text that immediately follows the `552` code in the
 	 * response sent during transmission with the `DATA` command if the input
@@ -577,11 +581,11 @@ export interface ServerConfig {
 	/**
 	 * Filters the client connection before any commands are processed.
 	 * This can be used to implement IP-based access control, for example.
-	 * 
+	 *
 	 * **This function is expected to return a {@link FilterOutput} or
 	 * a {@link Promise} of one - you should only use `socket` for reading
 	 * 	client info, like the IP address.**
-	 * 
+	 *
 	 * @param socket - The `Socket` corresponding to this connection.
 	 */
 	filterClient(socket: Socket): LoosePromise<FilterOutput>;
@@ -590,11 +594,11 @@ export interface ServerConfig {
 	 * Filters the message after it has been received, but before it is added
 	 * to the mail queue. This can be used to implement content-based filtering
 	 * or modify headers, for example.
-	 * 
+	 *
 	 * **This function is expected to return a {@link MessageFilterOutput} or
 	 * a {@link Promise} of one - you should only use `response` for reading
 	 * connection state.**
-	 * 
+	 *
 	 * @param message - The raw bytes of the message that was received.
 	 * @param response - The {@link SmtpResponse} object used for this session.
 	 */
@@ -614,9 +618,9 @@ export interface ServerConfig {
 	 */
 	hostname: string;
 
-	/** 
+	/**
 	 * The types of authentication the server supports (default is `PLAIN` and `LOGIN`).
-	 * 
+	 *
 	 * **NOTE: If you specify other methods, you must implement the corresponding
 	 * authentication logic by overriding the default `AUTH` handler.**
 	 */
@@ -633,11 +637,11 @@ export interface ServerConfig {
 
 	/** Whether the server should advertise support for the `STARTTLS` extension. */
 	startTls: boolean;
-	
+
 	/** The maximum size of the message in bytes. */
 	maxSize?: number;
-	
-	/** 
+
+	/**
 	 * Whether the server should allow unencrypted authentication
 	 * (i.e. `AUTH` before `STARTTLS`).
 	 * */
@@ -669,7 +673,7 @@ export interface MailTransaction {
 
 	/** The recipients of the message. */
 	to: Set<string>;
-	
+
 	/** The data of the message (`null` if not received yet). */
 	data: Buffer | null;
 }
@@ -697,7 +701,7 @@ export interface Queue<T> {
 	/**
 	 * Adds an item to the queue.
 	 */
-	add(item: T): void;
+	add(item: T): LoosePromise<QueueAddResult>;
 
 	/**
 	 * Removes and returns the first item from the queue,

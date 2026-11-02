@@ -27,7 +27,7 @@ export default class SmtpServer extends Server {
 	private __onCommandHandler: CommandHandler = () => {};
 
 	/**
-	  * The internal handler for `AUTH LOGIN` and `AUTH PLAIN` (basic auth).
+	 * The internal handler for `AUTH LOGIN` and `AUTH PLAIN` (basic auth).
 	 */
 	private __basicAuthHandler = (
 		usernameBuffer: Buffer,
@@ -415,8 +415,18 @@ export default class SmtpServer extends Server {
 			const filterOutput = await this.config.filterMessage(buffer);
 			if (filterOutput.allow) {
 				response.mailTransaction.data = filterOutput.revisedMessage ?? buffer;
-				await this.config.mailQueue.add(response.mailTransaction);
+				const addResponse = await this.config.mailQueue.add(
+					response.mailTransaction
+				);
 				response.mailTransaction = null; // State reset after DATA
+
+				if (!addResponse.success)
+					return response.status(
+						addResponse.statusCode ?? 451,
+						addResponse.enhancedCode ?? [4, 3, 0],
+						addResponse.text ?? 'Cannot add message to queue.'
+					);
+
 				return response.status(
 					250,
 					[2, 0, 0],
