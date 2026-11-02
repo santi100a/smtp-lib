@@ -24,8 +24,10 @@ export default class SmtpServer extends Server {
 	 */
 	readonly connectedSockets: Set<Socket> = new Set();
 
+	private __onCommandHandler: CommandHandler = () => {};
+
 	/**
-	 * The internal handler for AUTH LOGIN and AUTH PLAIN (basic auth).
+	  * The internal handler for `AUTH LOGIN` and `AUTH PLAIN` (basic auth).
 	 */
 	private __basicAuthHandler = (
 		usernameBuffer: Buffer,
@@ -250,7 +252,8 @@ export default class SmtpServer extends Server {
 
 			const { text, statusCode, enhancedCode, allow } =
 				await this.config.handleMailFrom(address, response);
-			if (allow)
+			if (allow) {
+				response.mailTransaction = { from: '', to: new Set(), data: null };
 				return response.status(
 					statusCode ?? 250,
 					enhancedCode ?? [2, 1, 0],
@@ -258,6 +261,7 @@ export default class SmtpServer extends Server {
 						this.config.generateMailAcceptedString?.(command, response) ??
 						'Sender accepted.'
 				);
+			}
 
 			return response.status(
 				statusCode ?? 550,
@@ -643,6 +647,21 @@ export default class SmtpServer extends Server {
 	 */
 	setHandler(commandName: string, handler: CommandHandler) {
 		this.__commandHandlers[commandName] = handler;
+		return this;
+	}
+
+	/**
+	 * Sets a handler that will be called for every command. This can be use for
+	 * logging commands, among other things.
+	 *
+	 * **NOTE: Only one handler can be set - calling
+	 * this method more than once will override the previous handler(s).**
+	 *
+	 * @param handler - The {@link CommandHandler} function to handle any command.
+	 *
+	 */
+	onCommand(handler: CommandHandler) {
+		this.__onCommandHandler = handler;
 		return this;
 	}
 
