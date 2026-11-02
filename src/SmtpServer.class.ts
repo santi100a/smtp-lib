@@ -157,6 +157,13 @@ export default class SmtpServer extends Server {
 					this.config.generateStartTlsAlreadyEncrypted?.(command, response) ??
 						'Already encrypted.'
 				);
+			if (!response.helloDone)
+				return response.status(
+					503,
+					[5, 5, 1],
+					this.config.generateEhloRequiredString?.(command, response) ??
+						'Say hello first! (EHLO/HELO).'
+				);
 			if (!this.config.startTls)
 				return response.status(
 					502,
@@ -235,8 +242,8 @@ export default class SmtpServer extends Server {
 				response.mailTransaction = { from: '', to: new Set(), data: null };
 			else if (!emailRegex.test(address))
 				return response.status(
-					555,
-					[5, 5, 2],
+					553,
+					[5, 1, 3],
 					this.config.generateInvalidFromString?.(command, response) ??
 						'Invalid FROM address.'
 				);
@@ -291,22 +298,22 @@ export default class SmtpServer extends Server {
 
 			if (address.length === 0) {
 				return response.status(
-					555,
-					[5, 5, 2],
+					553,
+					[5, 1, 3],
 					this.config.emptyRecipientAddressString?.(command, response) ??
 						'Empty recipient address.'
 				);
 			}
 			if (!emailRegex.test(address))
 				return response.status(
-					555,
-					[5, 5, 2],
+					553,
+					[5, 1, 3],
 					this.config.invalidRecipientAddressString?.(command, response) ??
 						'Invalid recipient address.'
 				);
 
 			const { text, statusCode, enhancedCode, allow } =
-				await this.config.handleMailFrom(address, response);
+				await this.config.handleRcptTo(address, response);
 			if (allow) {
 				// Push the valid recipient into the transaction array
 				response.mailTransaction.to.add(address);
@@ -315,13 +322,13 @@ export default class SmtpServer extends Server {
 					enhancedCode ?? [2, 1, 5],
 					text ??
 						this.config.generateRcptAcceptedString?.(command, response) ??
-						'Sender accepted.'
+						'Recipient accepted.'
 				);
 			}
 			return response.status(
 				statusCode ?? 550,
 				enhancedCode ?? [5, 0, 0],
-				text ?? 'Sender not accepted.'
+				text ?? 'Recipient not accepted.'
 			);
 		},
 		DATA: async (command, response) => {
@@ -404,12 +411,13 @@ export default class SmtpServer extends Server {
 			const filterOutput = await this.config.filterMessage(buffer);
 			if (filterOutput.allow) {
 				response.mailTransaction.data = filterOutput.revisedMessage ?? buffer;
-				this.config.mailQueue.add(response.mailTransaction);
+				await this.config.mailQueue.add(response.mailTransaction);
 				response.mailTransaction = null; // State reset after DATA
 				return response.status(
 					250,
 					[2, 0, 0],
-					this.config.generateDataAcceptedString?.(command, response) ??
+					filterOutput.text ??
+						this.config.generateDataAcceptedString?.(command, response) ??
 						'Message accepted!'
 				);
 			} else {
@@ -537,6 +545,13 @@ export default class SmtpServer extends Server {
 				...config.secureContextOptions
 			}
 		};
+		if (
+			Object.keys(mergedConfig.secureContextOptions ?? {}).length === 0 &&
+			mergedConfig.startTls
+		)
+			throw new Error(
+				'STARTTLS enabled but secure context options not provided.'
+			);
 		super(async (socket) => {
 			this.connectedSockets.add(socket);
 			socket.on('end', () => {
@@ -570,7 +585,7 @@ export default class SmtpServer extends Server {
 							451,
 							[4, 4, 2],
 							mergedConfig.generateServerTimeoutString?.(
-								{ command: null, params: [] },
+								{ command: null, params: [], raw: '' },
 								response
 							) ?? 'Command timeout! Closing connection.'
 						)

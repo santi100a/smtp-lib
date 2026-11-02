@@ -1,5 +1,4 @@
 import { ServerConfig } from './types';
-import Queue from './libqueue';
 
 /**
  * The server configuration defaults.
@@ -9,13 +8,22 @@ const config: ServerConfig = {
 		return 'ESMTP';
 	},
 	authTypes: ['LOGIN', 'PLAIN'],
+	authRequired: [],
 	binaryMime: false,
 	eightBitMime: true,
 	startTls: false,
 	unencryptedAuth: false,
 	smtpUtf8: false,
 	hostname: '',
-	mailQueue: new Queue(),
+	mailQueue: {
+		_: [],
+		add(item) {
+			this._.push(item);
+		},
+		remove() {
+			return this._.shift();
+		}
+	},
 	serverTimeout: 300_000,
 	generateEhloString(_, command) {
 		return `Hi${command.params.length > 0 ? ', '.concat(command.params.join(' ')) : ''}. Capabilities:`;
@@ -70,13 +78,12 @@ const config: ServerConfig = {
     },
 	handleInitError(socket, error) {
 		console.error('Init error:', error);
-		socket.write('421 Init Error\r\n');
+		socket.write('421 4.3.2 Init Error\r\n');
 		return socket.end();
 	},
-	handleInternalError(socket, error) {
-		console.error('Internal error:', error);
-		socket.write('420 Internal Error\r\n');
-		return socket.end();
+	handleInternalError(_, error, command, response) {
+		console.error(`Internal error (${command.raw}):`, error);
+		return response.status(451, [4, 3, 0], 'Internal Error').end();
 	},
 	generateEhloArgumentMissing() {
 		return 'EHLO argument missing.';
@@ -126,7 +133,7 @@ const config: ServerConfig = {
 			allow: true,
 			statusCode: 250,
 			enhancedCode: [2, 1, 5],
-			text: 'Receiver accepted.'
+			text: 'Recipient accepted.'
 		};
 	},
 	generateDataPromptString() {
@@ -160,8 +167,7 @@ const config: ServerConfig = {
 		return 'Timeout waiting for command, closing connection.';
 	},
 	unknownCommandHandler(command, response) {
-		return response.status(502, [5, 5, 1], `Unrecognized: ${command.command}`);
+		return response.status(502, [5, 5, 1], `Unrecognized command: ${command.command}`);
 	},
-    authRequired: []
 };
 export default config;

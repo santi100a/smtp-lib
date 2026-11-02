@@ -1,3 +1,5 @@
+/** @deprecated - Use a different implementation. */
+
 export default class Queue<T = unknown> {
     private readonly __array: T[] = [];
     add(input: T) {
