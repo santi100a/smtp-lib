@@ -34,3 +34,6 @@
 
 ## Version 1.0.7
 - Included the `SmtpResponse` in the exported type declarations.
+
+## Version 1.0.8
+- Corrected `SmtpResponse` export.
