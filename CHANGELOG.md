@@ -40,3 +40,6 @@
 
 ## Version 1.0.9
 - Fixed a critical bug in `MAIL FROM` handler.
+
+## Version 1.0.10
+- Fixed a critical bug regarding the `onCommand()` handler.

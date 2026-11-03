@@ -620,6 +620,7 @@ export default class SmtpServer extends Server {
 					const commandObject = parseCommand(line);
 					if (commandObject.command === null) continue;
 
+					await this.__onCommandHandler(commandObject, response);
 					const handler = this.__commandHandlers[commandObject.command];
 					try {
 						if (!handler) {
