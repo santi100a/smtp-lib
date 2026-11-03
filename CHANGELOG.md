@@ -31,3 +31,6 @@
 
 ## Version 1.0.6
 - Allowed the basic auth handler to return a `Promise<boolean>` to support asynchronous authentication processes. This allows the server to handle authentication checks that involve database lookups or external API calls.
+
+## Version 1.0.7
+- Included the `SmtpResponse` in the exported type declarations.
