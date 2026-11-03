@@ -37,3 +37,6 @@
 
 ## Version 1.0.8
 - Corrected `SmtpResponse` export.
+
+## Version 1.0.9
+- Fixed a critical bug in `MAIL FROM` handler.

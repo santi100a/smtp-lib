@@ -262,7 +262,7 @@ export default class SmtpServer extends Server {
 			const { text, statusCode, enhancedCode, allow } =
 				await this.config.handleMailFrom(address, response);
 			if (allow) {
-				response.mailTransaction = { from: '', to: new Set(), data: null };
+				response.mailTransaction = { from: address, to: new Set(), data: null };
 				return response.status(
 					statusCode ?? 250,
 					enhancedCode ?? [2, 1, 0],
