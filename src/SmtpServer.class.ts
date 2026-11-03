@@ -2,7 +2,12 @@ import { Server, type Socket } from 'node:net';
 import { createSecureContext, TLSSocket } from 'node:tls';
 import { createLineReader } from './libreadline';
 import parseCommand = require('./libparse');
-import { ServerConfig, CommandHandler, SmtpCommand } from './types';
+import {
+	ServerConfig,
+	CommandHandler,
+	SmtpCommand,
+	LoosePromise
+} from './types';
 import SmtpResponse from './SmtpResponse.class';
 import defaultConfig from './defaultConfig';
 
@@ -29,9 +34,13 @@ export default class SmtpServer extends Server {
 	/**
 	 * The internal handler for `AUTH LOGIN` and `AUTH PLAIN` (basic auth).
 	 */
-	private __basicAuthHandler = (
+	private __basicAuthHandler: (
 		usernameBuffer: Buffer,
 		passwordBuffer: Buffer,
+		command: SmtpCommand,
+		response: SmtpResponse
+	) => LoosePromise<boolean> = (
+		_, __,
 		command: SmtpCommand,
 		response: SmtpResponse
 	) => {
@@ -469,7 +478,7 @@ export default class SmtpServer extends Server {
 							'Malformed auth string.'
 					);
 				const [, username, password] = parts;
-				const authenticated = this.__basicAuthHandler(
+				const authenticated = await this.__basicAuthHandler(
 					Buffer.from(username),
 					Buffer.from(password),
 					command,
@@ -511,7 +520,7 @@ export default class SmtpServer extends Server {
 				response.status(334, Buffer.from(passPrompt).toString('base64'));
 				const passwordLine = await response.readline();
 				if (passwordLine === null) return;
-				const authenticated = this.__basicAuthHandler(
+				const authenticated = await this.__basicAuthHandler(
 					b64decode(usernameLine),
 					b64decode(passwordLine),
 					command,
@@ -693,7 +702,7 @@ export default class SmtpServer extends Server {
 			passwordBuffer: Buffer,
 			command: SmtpCommand,
 			response: SmtpResponse
-		) => boolean
+		) => LoosePromise<boolean>
 	) {
 		this.__basicAuthHandler = handler;
 		return this;

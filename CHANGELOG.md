@@ -28,3 +28,6 @@
 
 ## Version 1.0.5
 - Modified the default `DATA` handler to expect a return value from `Queue.add()` to determine whether the message was successfully added to the queue. If `Queue.add()` returns an object with `success: false`, the server will respond with a `451 4.3.0` error, indicating that the message could not be added to the queue. This change ensures that the server correctly handles storage or queuing errors, providing appropriate feedback to the client.
+
+## Version 1.0.6
+- Allowed the basic auth handler to return a `Promise<boolean>` to support asynchronous authentication processes. This allows the server to handle authentication checks that involve database lookups or external API calls.
